@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Ambientes virtuais
+.venv/
+venv/
+
+# Poetry
+poetry.toml
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Frames extraídos
+select_frames/get_by_time/output/
+select_frames/MSSIM/output/
+
+# Resultados do CNNDetection
+models/CNNDetection/results/
+
+# Dataset
+datasets/
+
+# Vídeos
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Logs
+*.log
