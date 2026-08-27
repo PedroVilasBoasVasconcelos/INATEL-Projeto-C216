@@ -1,0 +1,24 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Pedro Vasconcelos",email = "Vasconcelosp43@gmail.com"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi (>=0.141.1,<0.142.0)",
+    "uvicorn (>=0.52.3,<0.53.0)"
+]
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.1.1,<10.0.0)",
+    "httpx (>=0.28.1,<0.29.0)",
+    "ruff (>=0.16.3,<0.17.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
