@@ -1,38 +1,70 @@
-.PHONY: help install test lint format run clean
+.PHONY: help install test lint format check run clean docker-build docker-up docker-down docker-logs docker-test db-shell
 
-PYTEST := poetry run pytest
-UVICORN := poetry run uvicorn
-RUFF := poetry run ruff
+BACKEND_DIR := backend
+POETRY := poetry
+PYTEST := $(POETRY) run pytest
+UVICORN := $(POETRY) run uvicorn
+RUFF := $(POETRY) run ruff
+
+.DEFAULT_GOAL := help
 
 help:
 	@echo "Comandos disponiveis:"
-	@echo "  make install  - instala dependencias"
-	@echo "  make test     - executa testes"
-	@echo "  make lint     - verifica o codigo"
-	@echo "  make format   - formata o codigo"
-	@echo "  make run      - inicia o servidor"
-	@echo "  make clean    - remove arquivos temporarios"
+	@echo "  make install  - instala dependencias "
+	@echo "  make test     - executa testes "
+	@echo "  make lint     - verifica o codigo "
+	@echo "  make format   - formata o codigo "
+	@echo "  make check    - executa lint e testes "
+	@echo "  make run      - inicia o servidor "
+	@echo "  make clean    - remove arquivos temporarios "
+	@echo "  make docker-build - constroi a imagem do backend "
+	@echo "  make docker-up - inicia backend e banco "
+	@echo "  make docker-down - para os servicos Docker "
+	@echo "  make docker-logs - acompanha os logs dos servicos "
+	@echo "  make docker-test - executa testes no container "
+	@echo "  make db-shell - abre o PostgreSQL "
 
 install:
 	@echo "Instalando dependencias..."
-	@cd backend && poetry install --no-root
+	@cd $(BACKEND_DIR) && $(POETRY) install --no-root
 
 test:
 	@echo "Executando testes..."
-	@cd backend && $(PYTEST)
+	@cd $(BACKEND_DIR) && $(PYTEST)
 
 lint:
 	@echo "Verificando codigo..."
-	@cd backend && $(RUFF) check .
+	@cd $(BACKEND_DIR) && $(RUFF) check .
 
 format:
 	@echo "Formatando codigo..."
-	@cd backend && $(RUFF) format .
+	@cd $(BACKEND_DIR) && $(RUFF) format .
+	@cd $(BACKEND_DIR) && $(RUFF) check . --fix
+
+check: lint test
 
 run:
 	@echo "Iniciando servidor..."
-	@cd backend && $(UVICORN) app.main:app --reload
+	@cd $(BACKEND_DIR) && $(UVICORN) app.main:app --reload --host 127.0.0.1 --port 8000
+
+docker-build:
+	@docker compose build
+
+docker-up:
+	@docker compose up -d --build
+
+docker-down:
+	@docker compose down
+
+docker-logs:
+	@docker compose logs -f
+
+docker-test:
+	@docker compose run --rm backend poetry run pytest
+
+db-shell:
+	@docker compose exec db psql -U postgres -d termodejogos
 
 clean:
 	@echo "Removendo arquivos temporarios..."
-	@cd backend && poetry run python -c "import pathlib, shutil; [shutil.rmtree(path) for path in pathlib.Path('..').rglob('__pycache__') if path.is_dir()]; [shutil.rmtree(path) for path in pathlib.Path('..').rglob('.pytest_cache') if path.is_dir()]"
+	@cd $(BACKEND_DIR) && $(POETRY) run python -c "import pathlib, shutil; [shutil.rmtree(path) for path in pathlib.Path('..').rglob('__pycache__') if path.is_dir()]; [shutil.rmtree(path) for path in pathlib.Path('..').rglob('.pytest_cache') if path.is_dir()]"
