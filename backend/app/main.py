@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.game import CATALOG, Game, GameService, GameStatus
+from app.game import CATALOG, Game, GameMode, GameService, GameStatus
 
 app = FastAPI(title="Termo de Jogos API", version="0.1.0")
 game_service = GameService(CATALOG)
@@ -15,6 +15,7 @@ class GuessRequest(BaseModel):
 
 class GameResponse(BaseModel):
     id: UUID
+    mode: GameMode
     image_url: str
     blur_percentage: int
     attempts: int
@@ -22,12 +23,23 @@ class GameResponse(BaseModel):
     status: GameStatus
     correct: bool | None = None
     answer: str | None = None
+    guesses: list[dict[str, bool | str]]
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "message": "Termo de Jogos API",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 def to_response(game: Game, correct: bool | None = None) -> GameResponse:
     finished = game.status != GameStatus.ACTIVE
     return GameResponse(
         id=game.id,
+        mode=game.mode,
         image_url=game.definition.image_url,
         blur_percentage=game.blur_percentage,
         attempts=game.attempts,
@@ -35,6 +47,10 @@ def to_response(game: Game, correct: bool | None = None) -> GameResponse:
         status=game.status,
         correct=correct,
         answer=game.definition.title if finished else None,
+        guesses=[
+            {"answer": guess.answer, "correct": guess.correct}
+            for guess in game.guesses
+        ],
     )
 
 
@@ -48,8 +64,13 @@ def health() -> dict[str, str]:
     response_model=GameResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def start_game() -> GameResponse:
-    return to_response(game_service.start_game())
+def start_game(mode: GameMode = GameMode.DAILY) -> GameResponse:
+    return to_response(game_service.start_game(mode))
+
+
+@app.get("/api/games/search", response_model=list[str])
+def search_games(q: str = "") -> list[str]:
+    return game_service.search_titles(q)
 
 
 @app.get("/api/games/{game_id}", response_model=GameResponse)
