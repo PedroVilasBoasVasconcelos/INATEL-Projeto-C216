@@ -79,13 +79,14 @@ def test_streak_ends_on_the_first_wrong_guess() -> None:
     assert response.json()["attempts"] == 1
 
 
-def test_correct_guess_ignores_case_and_ends_game() -> None:
+@pytest.mark.parametrize("answer", ["  0 A.D. ", "0 a.d."])
+def test_correct_guess_ignores_case_and_ends_game(answer: str) -> None:
     game = client.post("/api/games", params={"mode": "streak"}).json()
     expected_title = CATALOG[0].title
 
     response = client.post(
         f"/api/games/{game['id']}/guesses",
-        json={"answer": f"  {expected_title.upper()} "},
+        json={"answer": answer},
     )
 
     assert response.status_code == 200

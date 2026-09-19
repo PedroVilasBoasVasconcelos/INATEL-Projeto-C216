@@ -1,4 +1,4 @@
-.PHONY: help install test lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-shell
+.PHONY: help install test test-verbose lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-shell
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -13,6 +13,7 @@ help:
 	@echo "Comandos disponiveis:"
 	@echo "  make install  - instala dependencias "
 	@echo "  make test     - executa testes "
+	@echo "  make test-verbose - executa testes com mais detalhes"
 	@echo "  make lint     - verifica o codigo "
 	@echo "  make format   - formata o codigo "
 	@echo "  make check    - executa lint e testes "
@@ -35,6 +36,10 @@ install:
 test:
 	@echo "Executando testes..."
 	@cd $(BACKEND_DIR) && $(PYTEST)
+
+test-verbose:
+	@echo "Executando testes em modo detalhado..."
+	@cd $(BACKEND_DIR) && $(PYTEST) -vv
 
 lint:
 	@echo "Verificando codigo..."
