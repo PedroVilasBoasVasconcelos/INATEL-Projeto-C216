@@ -1,6 +1,7 @@
-.PHONY: help install test lint format check run clean docker-build docker-up docker-down docker-logs docker-test db-shell
+.PHONY: help install test test-verbose lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-shell
 
 BACKEND_DIR := backend
+FRONTEND_DIR := frontend
 POETRY := poetry
 PYTEST := $(POETRY) run pytest
 UVICORN := $(POETRY) run uvicorn
@@ -12,10 +13,14 @@ help:
 	@echo "Comandos disponiveis:"
 	@echo "  make install  - instala dependencias "
 	@echo "  make test     - executa testes "
+	@echo "  make test-verbose - executa testes com mais detalhes"
 	@echo "  make lint     - verifica o codigo "
 	@echo "  make format   - formata o codigo "
 	@echo "  make check    - executa lint e testes "
 	@echo "  make run      - inicia o servidor "
+	@echo "  make frontend-install - instala dependencias do frontend"
+	@echo "  make frontend-dev - inicia o frontend"
+	@echo "  make frontend-build - gera o build do frontend"
 	@echo "  make clean    - remove arquivos temporarios "
 	@echo "  make docker-build - constroi a imagem do backend "
 	@echo "  make docker-up - inicia backend e banco "
@@ -32,6 +37,10 @@ test:
 	@echo "Executando testes..."
 	@cd $(BACKEND_DIR) && $(PYTEST)
 
+test-verbose:
+	@echo "Executando testes em modo detalhado..."
+	@cd $(BACKEND_DIR) && $(PYTEST) -vv
+
 lint:
 	@echo "Verificando codigo..."
 	@cd $(BACKEND_DIR) && $(RUFF) check .
@@ -46,6 +55,15 @@ check: lint test
 run:
 	@echo "Iniciando servidor..."
 	@cd $(BACKEND_DIR) && $(UVICORN) app.main:app --reload --host 127.0.0.1 --port 8000
+
+frontend-install:
+	@cd $(FRONTEND_DIR) && npm install
+
+frontend-dev:
+	@cd $(FRONTEND_DIR) && npm run dev
+
+frontend-build:
+	@cd $(FRONTEND_DIR) && npm run build
 
 docker-build:
 	@docker compose build
