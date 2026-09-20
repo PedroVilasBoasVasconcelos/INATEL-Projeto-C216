@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import CATALOG, GameMode
+from app.game import CATALOG, CLUE_CATALOG, ClueGameService, GameMode
 from app.main import app, game_service
 
 client = TestClient(app)
@@ -44,6 +44,41 @@ def test_search_games_returns_matching_titles() -> None:
     assert "007 First Light" in response.json()
 
 
+def test_clue_catalog_loads_sales_metadata() -> None:
+    assert len(CLUE_CATALOG) > 100
+    assert CLUE_CATALOG[0].release_year > 0
+    assert CLUE_CATALOG[0].total_sales >= 0
+
+
+def test_clue_guess_returns_comparison_statuses() -> None:
+    clue_service = ClueGameService(CLUE_CATALOG)
+    game_id = clue_service.start_game()
+    target = clue_service.get_game(game_id)[0]
+
+    result = clue_service.guess(game_id, target.title)
+
+    assert result.complete is True
+    assert all(comparison.result.value == "correct" for comparison in result.comparisons)
+
+
+def test_clue_unknown_title_is_rejected() -> None:
+    clue_service = ClueGameService(CLUE_CATALOG)
+    game_id = clue_service.start_game()
+
+    with pytest.raises(ValueError, match="title_not_found"):
+        clue_service.guess(game_id, "jogo que não existe")
+
+
+def test_clue_hint_reveals_each_field_only_once() -> None:
+    clue_service = ClueGameService(CLUE_CATALOG)
+    game_id = clue_service.start_game()
+
+    first_hint = clue_service.hint(game_id)
+    second_hint = clue_service.hint(game_id)
+
+    assert first_hint.field != second_hint.field
+
+
 def test_wrong_guess_reduces_blur() -> None:
     game = client.post("/api/games").json()
 
@@ -68,15 +103,16 @@ def test_daily_game_is_stable_for_the_same_day() -> None:
     assert first["image_url"] == second["image_url"]
 
 
-def test_streak_ends_on_the_first_wrong_guess() -> None:
+def test_streak_keeps_five_attempts_after_wrong_guess() -> None:
     game = client.post("/api/games", params={"mode": "streak"}).json()
 
     response = client.post(
         f"/api/games/{game['id']}/guesses", json={"answer": "wrong"}
     )
 
-    assert response.json()["status"] == "lost"
+    assert response.json()["status"] == "active"
     assert response.json()["attempts"] == 1
+    assert response.json()["blur_percentage"] == 80
 
 
 @pytest.mark.parametrize("answer", ["  0 A.D. ", "0 a.d."])

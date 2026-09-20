@@ -15,6 +15,7 @@ RUN poetry install --with dev --no-root
 
 COPY backend/app ./app
 COPY jogos.json ./jogos.json
+COPY jogos_vendas.json ./jogos_vendas.json
 
 EXPOSE 8000
 
