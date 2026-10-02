@@ -45,3 +45,8 @@ datasets/
 
 # Logs
 *.log
+
+# Frontend (entrega posterior)
+/frontend/
+node_modules/
+dist/

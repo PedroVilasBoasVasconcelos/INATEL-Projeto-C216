@@ -10,10 +10,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
-COPY pyproject.toml poetry.lock ./
+COPY backend/pyproject.toml backend/poetry.lock ./
 RUN poetry install --with dev --no-root
 
-COPY app ./app
+COPY backend/app ./app
+COPY jogos.json ./jogos.json
+COPY jogos_vendas.json ./jogos_vendas.json
 
 EXPOSE 8000
 
