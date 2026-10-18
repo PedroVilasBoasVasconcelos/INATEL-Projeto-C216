@@ -1,4 +1,4 @@
-.PHONY: help install test test-verbose lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-shell
+.PHONY: help install test test-verbose lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-migrate db-shell
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -17,7 +17,7 @@ help:
 	@echo "  make lint     - verifica o codigo "
 	@echo "  make format   - formata o codigo "
 	@echo "  make check    - executa lint e testes "
-	@echo "  make run      - inicia o servidor "
+	@echo "  make run      - inicia o gateway e os servicos SOA via Docker "
 	@echo "  make frontend-install - instala dependencias do frontend"
 	@echo "  make frontend-dev - inicia o frontend"
 	@echo "  make frontend-build - gera o build do frontend"
@@ -27,6 +27,7 @@ help:
 	@echo "  make docker-down - para os servicos Docker "
 	@echo "  make docker-logs - acompanha os logs dos servicos "
 	@echo "  make docker-test - executa testes no container "
+	@echo "  make db-migrate - aplica as migrations no banco "
 	@echo "  make db-shell - abre o PostgreSQL "
 
 install:
@@ -53,8 +54,8 @@ format:
 check: lint test
 
 run:
-	@echo "Iniciando servidor..."
-	@cd $(BACKEND_DIR) && $(UVICORN) app.main:app --reload --host 127.0.0.1 --port 8000
+	@echo "Iniciando gateway e servicos..."
+	@docker compose up --build
 
 frontend-install:
 	@cd $(FRONTEND_DIR) && npm install
@@ -79,6 +80,9 @@ docker-logs:
 
 docker-test:
 	@docker compose run --rm backend poetry run pytest
+
+db-migrate:
+	@docker compose run --rm migrations
 
 db-shell:
 	@docker compose exec db psql -U postgres -d termodejogos

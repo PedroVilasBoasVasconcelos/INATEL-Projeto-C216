@@ -11,9 +11,25 @@ jobs:
   test:
     name: Test backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: termodejogos
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d termodejogos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/termodejogos
 
     steps:
       - name: Checkout repository
@@ -29,6 +45,9 @@ jobs:
 
       - name: Install dependencies
         run: poetry install --with dev --no-root
+
+      - name: Apply database migrations
+        run: poetry run alembic upgrade head
 
       - name: Run tests
         run: poetry run pytest
