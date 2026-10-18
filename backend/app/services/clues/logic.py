@@ -1,27 +1,15 @@
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 from uuid import UUID, uuid4
 
+from sqlalchemy.orm import Session
 
-class GameStatus(StrEnum):
-    ACTIVE = "active"
-    WON = "won"
-    LOST = "lost"
-
-
-class GameMode(StrEnum):
-    DAILY = "daily"
-    STREAK = "streak"
-    CLUES = "clues"
-
-
-@dataclass(frozen=True)
-class GameDefinition:
-    title: str
-    image_url: str
+from app.models.clue import ClueSessionModel
+from app.services.games.logic import normalize
 
 
 @dataclass(frozen=True)
@@ -61,107 +49,20 @@ class ClueHint:
     value: str | int | float
 
 
-@dataclass(frozen=True)
-class Guess:
-    answer: str
-    correct: bool
+class ClueRepository(Protocol):
+    def create(
+        self, session: Session, game_id: UUID, target: ClueGameDefinition
+    ) -> None: ...
 
+    def get(self, session: Session, game_id: UUID) -> ClueSessionModel | None: ...
 
-@dataclass
-class Game:
-    id: UUID
-    definition: GameDefinition
-    mode: GameMode = GameMode.DAILY
-    attempts: int = 0
-    blur_percentage: int = 100
-    status: GameStatus = GameStatus.ACTIVE
-    guesses: list[Guess] = field(default_factory=list)
-
-    max_attempts = 5
-    blur_step = 20
-
-    def guess(self, answer: str) -> bool:
-        if self.status != GameStatus.ACTIVE:
-            raise ValueError("game_finished")
-
-        self.attempts += 1
-        is_correct = normalize(answer) == normalize(self.definition.title)
-        self.guesses.append(Guess(answer=answer.strip(), correct=is_correct))
-
-        if is_correct:
-            self.status = GameStatus.WON
-            self.blur_percentage = 0
-        elif self.attempts >= self.max_attempts:
-            self.status = GameStatus.LOST
-        else:
-            self.blur_percentage = max(0, 100 - self.attempts * self.blur_step)
-
-        return is_correct
-
-
-def normalize(value: str) -> str:
-    return " ".join(value.strip().casefold().split())
-
-
-class GameService:
-    def __init__(self, catalog: tuple[GameDefinition, ...]) -> None:
-        self.catalog = catalog
-        self.games: dict[UUID, Game] = {}
-
-    def start_game(self, mode: GameMode = GameMode.DAILY) -> Game:
-        if mode == GameMode.DAILY:
-            catalog_index = (
-                datetime.now().astimezone().date().toordinal() % len(self.catalog)
-            )
-        else:
-            catalog_index = len(self.games) % len(self.catalog)
-
-        definition = self.catalog[catalog_index]
-        game = Game(id=uuid4(), definition=definition, mode=mode)
-        self.games[game.id] = game
-        return game
-
-    def get_game(self, game_id: UUID) -> Game | None:
-        return self.games.get(game_id)
-
-    def search_titles(self, query: str, limit: int = 8) -> list[str]:
-        normalized_query = normalize(query)
-        if not normalized_query:
-            return []
-
-        return [
-            game.title
-            for game in self.catalog
-            if normalized_query in normalize(game.title)
-        ][:limit]
-
-
-def load_catalog(dataset_path: Path) -> tuple[GameDefinition, ...]:
-    with dataset_path.open(encoding="utf-8-sig") as dataset_file:
-        payload = json.load(dataset_file)
-
-    catalog: list[GameDefinition] = []
-    seen_games: set[str] = set()
-
-    for record in payload.get("results", []):
-        title = str(record.get("game_name", "")).strip()
-        image_url = str(record.get("cover_url", "")).strip()
-        game_key = normalize(title)
-
-        if not title or not image_url or game_key in seen_games:
-            continue
-
-        seen_games.add(game_key)
-        catalog.append(GameDefinition(title=title, image_url=image_url))
-
-    if not catalog:
-        raise ValueError("Dataset does not contain valid games")
-
-    return tuple(catalog)
-
-
-DATASET_PATH = Path(__file__).resolve().parents[2] / "jogos.json"
-CATALOG = load_catalog(DATASET_PATH)
+    def save_state(
+        self,
+        session: Session,
+        game_id: UUID,
+        guesses: list[dict[str, object]],
+        used_hints: list[str],
+    ) -> None: ...
 
 
 def parse_number(value: str) -> float:
@@ -203,30 +104,58 @@ def load_clue_catalog(dataset_path: Path) -> tuple[ClueGameDefinition, ...]:
     return tuple(catalog)
 
 
-CLUE_DATASET_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "jogos_vendas.json"
-)
+CLUE_DATASET_PATH = Path(__file__).resolve().parents[4] / "jogos_vendas.json"
 CLUE_CATALOG = load_clue_catalog(CLUE_DATASET_PATH)
 
 
 class ClueGameService:
-    def __init__(self, catalog: tuple[ClueGameDefinition, ...]) -> None:
+    def __init__(
+        self,
+        catalog: tuple[ClueGameDefinition, ...],
+        repository: ClueRepository,
+    ) -> None:
         self.catalog = catalog
-        self.games: dict[UUID, tuple[ClueGameDefinition, list[ClueGuess], set[str]]] = {}
+        self.repository = repository
 
-    def start_game(self) -> UUID:
+    def start_game(self, session: Session) -> UUID:
         target = self.catalog[
             datetime.now().astimezone().date().toordinal() % len(self.catalog)
         ]
         game_id = uuid4()
-        self.games[game_id] = (target, [], set())
+        self.repository.create(session, game_id, target)
         return game_id
 
     def get_game(
-        self, game_id: UUID
+        self, session: Session, game_id: UUID
     ) -> tuple[ClueGameDefinition, list[ClueGuess], set[str]] | None:
-        return self.games.get(game_id)
+        game = self.repository.get(session, game_id)
+        if game is None:
+            return None
+        target = ClueGameDefinition(
+            title=game.title,
+            console=game.console,
+            release_year=game.release_year,
+            publisher=game.publisher,
+            developer=game.developer,
+            total_sales=game.total_sales,
+        )
+        guesses = [
+            ClueGuess(
+                title=str(record["title"]),
+                complete=bool(record["complete"]),
+                comparisons=[
+                    ClueComparison(
+                        field=str(comparison["field"]),
+                        value=comparison["value"],
+                        result=ClueResult(str(comparison["result"])),
+                        direction=comparison["direction"],
+                    )
+                    for comparison in record["comparisons"]
+                ],
+            )
+            for record in game.guesses
+        ]
+        return target, guesses, set(game.used_hints)
 
     def search_titles(self, query: str, limit: int = 8) -> list[str]:
         normalized_query = normalize(query)
@@ -244,19 +173,27 @@ class ClueGameService:
     def find_game(self, title: str) -> ClueGameDefinition | None:
         normalized_title = normalize(title)
         return next(
-            (game for game in self.catalog if normalize(game.title) == normalized_title),
+            (
+                game
+                for game in self.catalog
+                if normalize(game.title) == normalized_title
+            ),
             None,
         )
 
-    def guess(self, game_id: UUID, title: str) -> ClueGuess:
-        state = self.games.get(game_id)
+    def guess(self, session: Session, game_id: UUID, title: str) -> ClueGuess:
+        state = self.get_game(session, game_id)
         if state is None:
             raise ValueError("game_not_found")
-        target, guesses, _ = state
+        target, guesses, used_hints = state
         if guesses and guesses[-1].complete:
             raise ValueError("game_finished")
 
-        candidate = self.find_game(title)
+        candidate = (
+            target
+            if normalize(title) == normalize(target.title)
+            else self.find_game(title)
+        )
         if candidate is None:
             raise ValueError("title_not_found")
 
@@ -268,12 +205,20 @@ class ClueGameService:
             compare_sales(candidate.total_sales, target.total_sales),
         ]
         complete = all(item.result == ClueResult.CORRECT for item in comparisons)
-        result = ClueGuess(title=candidate.title, comparisons=comparisons, complete=complete)
+        result = ClueGuess(
+            title=candidate.title, comparisons=comparisons, complete=complete
+        )
         guesses.append(result)
+        self.repository.save_state(
+            session,
+            game_id,
+            [self._serialize_guess(guess) for guess in guesses],
+            sorted(used_hints),
+        )
         return result
 
-    def hint(self, game_id: UUID) -> ClueHint:
-        state = self.games.get(game_id)
+    def hint(self, session: Session, game_id: UUID) -> ClueHint:
+        state = self.get_game(session, game_id)
         if state is None:
             raise ValueError("game_not_found")
 
@@ -293,23 +238,61 @@ class ClueGameService:
             raise ValueError("no_hints_left")
 
         used_hints.add(next_hint[0])
+        self.repository.save_state(
+            session,
+            game_id,
+            [self._serialize_guess(guess) for guess in guesses],
+            sorted(used_hints),
+        )
         return ClueHint(field=next_hint[0], value=next_hint[1])
+
+    @staticmethod
+    def _serialize_guess(guess: ClueGuess) -> dict[str, object]:
+        return {
+            "title": guess.title,
+            "complete": guess.complete,
+            "comparisons": [
+                {
+                    "field": comparison.field,
+                    "value": comparison.value,
+                    "result": comparison.result.value,
+                    "direction": comparison.direction,
+                }
+                for comparison in guess.comparisons
+            ],
+        }
 
 
 def compare_text(field: str, value: str, target: str) -> ClueComparison:
-    result = ClueResult.CORRECT if normalize(value) == normalize(target) else ClueResult.WRONG
+    result = (
+        ClueResult.CORRECT
+        if normalize(value) == normalize(target)
+        else ClueResult.WRONG
+    )
     return ClueComparison(field=field, value=value, result=result)
 
 
 def compare_year(value: int, target: int) -> ClueComparison:
     difference = abs(value - target)
-    result = ClueResult.CORRECT if difference == 0 else ClueResult.CLOSE if difference <= 2 else ClueResult.WRONG
+    result = (
+        ClueResult.CORRECT
+        if difference == 0
+        else ClueResult.CLOSE
+        if difference <= 2
+        else ClueResult.WRONG
+    )
     direction = "up" if value < target else "down" if value > target else None
     return ClueComparison("release_year", value, result, direction)
 
 
 def compare_sales(value: float, target: float) -> ClueComparison:
     difference = abs(value - target) / target if target else 0
-    result = ClueResult.CORRECT if value == target else ClueResult.CLOSE if difference <= 0.2 else ClueResult.WRONG
+    result = (
+        ClueResult.CORRECT
+        if value == target
+        else ClueResult.CLOSE
+        if difference <= 0.2
+        else ClueResult.WRONG
+    )
     direction = "up" if value < target else "down" if value > target else None
     return ClueComparison("total_sales", value, result, direction)

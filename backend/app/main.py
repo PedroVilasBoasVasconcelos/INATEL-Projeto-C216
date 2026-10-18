@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routes import router
+from app.api.routes.gateway import router
 
-app = FastAPI(title="Termo de Jogos API", version="0.1.0")
+app = FastAPI(title="Termo de Jogos API Gateway", version="0.1.0")
 app.include_router(router)

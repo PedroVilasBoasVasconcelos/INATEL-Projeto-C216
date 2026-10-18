@@ -1,20 +1,67 @@
+from collections.abc import AsyncIterator, Callable
 from uuid import UUID
 
+import httpx2
 import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
-from app.game import CATALOG, GameMode
+from alembic import command
+from app.api.routes.gateway import (
+    get_clues_client,
+    get_favorites_client,
+    get_games_client,
+)
+from app.database import SessionLocal
 from app.main import app
-from app.routes import clue_game_service, favorites_service, game_service
+from app.models.clue import ClueSessionModel
+from app.models.favorite import FavoriteSequenceModel
+from app.models.game import GameGuessModel, GameSessionModel
+from app.repositories.clues import CluesRepository
+from app.repositories.favorites import FavoritesRepository
+from app.repositories.games import GamesRepository
+from app.services.clues.logic import CLUE_CATALOG, ClueGameService
+from app.services.clues.main import app as clues_app
+from app.services.favorites.logic import FavoritesService
+from app.services.favorites.main import app as favorites_app
+from app.services.games.logic import CATALOG, GameMode, GameService
+from app.services.games.main import app as games_app
 
 client = TestClient(app)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def apply_database_migrations() -> None:
+    command.upgrade(Config("alembic.ini"), "head")
+
+
 @pytest.fixture(autouse=True)
-def clear_services() -> None:
-    game_service.games.clear()
-    clue_game_service.games.clear()
-    favorites_service._favorites.clear()
+def configure_services() -> AsyncIterator[None]:
+    with SessionLocal() as session:
+        session.execute(delete(GameGuessModel))
+        session.execute(delete(GameSessionModel))
+        session.execute(delete(ClueSessionModel))
+        session.execute(delete(FavoriteSequenceModel))
+        session.commit()
+
+    def provide_client(
+        service_app: object,
+    ) -> Callable[[], AsyncIterator[httpx2.AsyncClient]]:
+        async def client_provider() -> AsyncIterator[httpx2.AsyncClient]:
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=service_app),
+                base_url="http://service.test",
+            ) as service_client:
+                yield service_client
+
+        return client_provider
+
+    app.dependency_overrides[get_games_client] = provide_client(games_app)
+    app.dependency_overrides[get_clues_client] = provide_client(clues_app)
+    app.dependency_overrides[get_favorites_client] = provide_client(favorites_app)
+    yield
+    app.dependency_overrides.clear()
 
 
 def test_root_and_health_endpoints() -> None:
@@ -45,6 +92,13 @@ def test_submit_wrong_guess_reduces_blur() -> None:
     assert response.status_code == 200
     assert response.json()["blur_percentage"] == 80
     assert response.json()["attempts"] == 1
+    with SessionLocal() as session:
+        restored = GameService(CATALOG, GamesRepository()).get_game(
+            session, UUID(game["id"])
+        )
+    assert restored is not None
+    assert restored.attempts == 1
+    assert restored.guesses[0].answer == "not this game"
 
 
 @pytest.mark.parametrize("answer", ["  0 A.D. ", "0 a.d."])
@@ -85,12 +139,24 @@ def test_clue_game_routes_start_search_guess_and_hint() -> None:
     assert hint.status_code == 200
     assert hint.json()["field"]
 
-    target = clue_game_service.get_game(UUID(game["id"]))[0]
+    with SessionLocal() as session:
+        restored = ClueGameService(CLUE_CATALOG, CluesRepository()).get_game(
+            session, UUID(game["id"])
+        )
+    assert restored is not None
+    target = restored[0]
     guess = client.post(
         f"/api/clue-games/{game['id']}/guesses", json={"answer": target.title}
     )
     assert guess.status_code == 200
     assert guess.json()["complete"] is True
+    with SessionLocal() as session:
+        restored_after_guess = ClueGameService(
+            CLUE_CATALOG, CluesRepository()
+        ).get_game(session, UUID(game["id"]))
+    assert restored_after_guess is not None
+    assert restored_after_guess[1][-1].complete is True
+    assert restored_after_guess[2] == {"console"}
 
 
 def test_favorites_put_patch_get_and_delete() -> None:
@@ -115,6 +181,9 @@ def test_favorites_put_patch_get_and_delete() -> None:
     assert first.json()["rounds_reached"] == 3
     assert second.json()["position"] == 2
     assert len(client.get("/api/favorites").json()) == 2
+    with SessionLocal() as session:
+        persisted = FavoritesService(FavoritesRepository()).get_all(session)
+    assert [favorite.id for favorite in persisted] == [UUID(first_id), UUID(second_id)]
 
     moved = client.patch(f"/api/favorites/{second_id}", json={"position": 1})
     assert moved.status_code == 200

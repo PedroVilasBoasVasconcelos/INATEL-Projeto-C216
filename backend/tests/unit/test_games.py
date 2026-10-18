@@ -1,8 +1,33 @@
+from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
-from app.game import CATALOG, CLUE_CATALOG, ClueGameService, Game, GameDefinition
+from app.database import Base
+from app.repositories.clues import CluesRepository
+from app.services.clues.logic import CLUE_CATALOG, ClueGameService
+from app.services.games.logic import (
+    CATALOG,
+    Game,
+    GameDefinition,
+)
+
+
+@pytest.fixture
+def database_session() -> Iterator[Session]:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 def test_catalog_loads_unique_games_with_cover_urls() -> None:
@@ -24,12 +49,12 @@ def test_game_guess_normalizes_case_and_whitespace() -> None:
     assert game.attempts == 1
 
 
-def test_clue_guess_returns_comparison_statuses() -> None:
-    clue_service = ClueGameService(CLUE_CATALOG)
-    game_id = clue_service.start_game()
-    target = clue_service.get_game(game_id)[0]
+def test_clue_guess_returns_comparison_statuses(database_session: Session) -> None:
+    clue_service = ClueGameService(CLUE_CATALOG, CluesRepository())
+    game_id = clue_service.start_game(database_session)
+    target = clue_service.get_game(database_session, game_id)[0]
 
-    result = clue_service.guess(game_id, target.title)
+    result = clue_service.guess(database_session, game_id, target.title)
 
     assert result.complete is True
     assert all(
@@ -37,19 +62,19 @@ def test_clue_guess_returns_comparison_statuses() -> None:
     )
 
 
-def test_clue_unknown_title_is_rejected() -> None:
-    clue_service = ClueGameService(CLUE_CATALOG)
-    game_id = clue_service.start_game()
+def test_clue_unknown_title_is_rejected(database_session: Session) -> None:
+    clue_service = ClueGameService(CLUE_CATALOG, CluesRepository())
+    game_id = clue_service.start_game(database_session)
 
     with pytest.raises(ValueError, match="title_not_found"):
-        clue_service.guess(game_id, "jogo que não existe")
+        clue_service.guess(database_session, game_id, "jogo que não existe")
 
 
-def test_clue_hint_reveals_each_field_only_once() -> None:
-    clue_service = ClueGameService(CLUE_CATALOG)
-    game_id = clue_service.start_game()
+def test_clue_hint_reveals_each_field_only_once(database_session: Session) -> None:
+    clue_service = ClueGameService(CLUE_CATALOG, CluesRepository())
+    game_id = clue_service.start_game(database_session)
 
-    first_hint = clue_service.hint(game_id)
-    second_hint = clue_service.hint(game_id)
+    first_hint = clue_service.hint(database_session, game_id)
+    second_hint = clue_service.hint(database_session, game_id)
 
     assert first_hint.field != second_hint.field
