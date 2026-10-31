@@ -2,6 +2,9 @@ name: Backend CI
 
 on:
   push:
+    branches:
+      - aulas
+      - main
   pull_request:
 
 permissions:

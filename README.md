@@ -98,7 +98,7 @@ cd ..
 make check-all
 ```
 
-O workflow `.github/workflows/ci-frontend.yml` executa Biome, Vitest, build e Playwright em pull requests que alteram o frontend e em pushes para `main`.
+O workflow `.github/workflows/ci-frontend.yml` executa Biome, Vitest, build e Playwright em todos os pull requests e em pushes para `aulas` ou `main`.
 
 ## Backend
 
