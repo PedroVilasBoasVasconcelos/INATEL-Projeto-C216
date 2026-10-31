@@ -1,4 +1,4 @@
-name: CI - Frontend
+name: Frontend CI
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   frontend:
-    name: Biome, Vitest, Build e Playwright
+    name: Test frontend
     runs-on: ubuntu-latest
     defaults:
       run:
