@@ -2,7 +2,7 @@
 
 ## Arquitetura
 
-O frontend React funciona como uma SPA e envia as requisições para o API Gateway. O gateway encaminha cada domínio para um serviço independente:
+O frontend React está sendo desenvolvido como uma SPA. Nesta entrega, as regras do Termo de Jogos rodam localmente; na próxima prática, o frontend será integrado ao API Gateway, que encaminha cada domínio para um serviço independente:
 
 - `games-service`: partidas de capa e busca de jogos.
 - `clues-service`: partidas do modo pistas e dicas.
@@ -43,7 +43,66 @@ backend/
 └── poetry.lock
 ```
 
-Para iniciar o stack completo, com Docker Compose instalado:
+## Frontend
+
+O frontend da Prática 6 usa JavaScript, React, Vite, Tailwind CSS e Biome para apresentar o **Termo de Jogos**. Nesta etapa, os modos de capa, sequência e pistas usam um catálogo local e mantêm o progresso apenas em memória. A integração com o backend fica para a próxima prática.
+
+Organização do frontend:
+
+```text
+frontend/
+├── src/
+│   ├── app/
+│   │   └── App.jsx
+│   ├── features/game/
+│   │   └── gameLogic.js
+│   ├── features/clues/
+│   │   └── ClueMode.jsx
+│   ├── styles.css
+│   └── main.jsx
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   ├── e2e/
+│   └── setup.js
+├── biome.json
+├── index.html
+├── vite.config.js
+├── playwright.config.js
+├── package.json
+└── package-lock.json
+```
+
+`package-lock.json` deve ser versionado para reproduzir as dependências. `node_modules/`, `dist/`, `playwright-report/` e `test-results/` são ignorados pelo Git.
+
+Instale as dependências e inicie a aplicação:
+
+```bash
+make frontend-install
+make frontend-dev
+```
+
+O Vite fica disponível em `http://localhost:5173`. Para validar o frontend, incluindo E2E:
+
+```bash
+make frontend-check
+make frontend-test-e2e
+```
+
+Os testes end-to-end usam Playwright e Chromium. Instale o navegador uma vez antes de executá-los localmente. `make check-all` também inclui as verificações do backend:
+
+```bash
+cd frontend
+npx playwright install chromium
+cd ..
+make check-all
+```
+
+O workflow `.github/workflows/ci-frontend.yml` executa Biome, Vitest, build e Playwright em pull requests que alteram o frontend e em pushes para `main`.
+
+## Backend
+
+Para iniciar o stack de backend, com Docker Compose instalado:
 
 ```bash
 make run

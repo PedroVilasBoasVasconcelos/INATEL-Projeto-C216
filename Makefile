@@ -1,4 +1,4 @@
-.PHONY: help install test test-verbose lint format check run frontend-install frontend-dev frontend-build clean docker-build docker-up docker-down docker-logs docker-test db-migrate db-shell
+.PHONY: help install test test-verbose lint format check check-all run frontend-install frontend-dev frontend-build frontend-test frontend-test-e2e frontend-lint frontend-format frontend-format-check frontend-check clean docker-build docker-up docker-down docker-logs docker-test db-migrate db-shell
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -21,6 +21,13 @@ help:
 	@echo "  make frontend-install - instala dependencias do frontend"
 	@echo "  make frontend-dev - inicia o frontend"
 	@echo "  make frontend-build - gera o build do frontend"
+	@echo "  make frontend-test - executa testes unitarios e de integracao"
+	@echo "  make frontend-test-e2e - executa testes de ponta a ponta"
+	@echo "  make frontend-lint - verifica o codigo do frontend"
+	@echo "  make frontend-format - formata o codigo do frontend"
+	@echo "  make frontend-format-check - verifica a formatacao do frontend"
+	@echo "  make frontend-check - executa lint, formatacao, testes e build"
+	@echo "  make check-all - valida backend e frontend, incluindo E2E"
 	@echo "  make clean    - remove arquivos temporarios "
 	@echo "  make docker-build - constroi a imagem do backend "
 	@echo "  make docker-up - inicia backend e banco "
@@ -58,13 +65,32 @@ run:
 	@docker compose up --build
 
 frontend-install:
-	@cd $(FRONTEND_DIR) && npm install
+	@cd $(FRONTEND_DIR) && npm ci
 
 frontend-dev:
 	@cd $(FRONTEND_DIR) && npm run dev
 
 frontend-build:
 	@cd $(FRONTEND_DIR) && npm run build
+
+frontend-test:
+	@cd $(FRONTEND_DIR) && npm test
+
+frontend-test-e2e:
+	@cd $(FRONTEND_DIR) && npm run test:e2e
+
+frontend-lint:
+	@cd $(FRONTEND_DIR) && npm run lint
+
+frontend-format:
+	@cd $(FRONTEND_DIR) && npm run format
+
+frontend-format-check:
+	@cd $(FRONTEND_DIR) && npm run format:check
+
+frontend-check: frontend-lint frontend-format-check frontend-test frontend-build
+
+check-all: check frontend-check frontend-test-e2e
 
 docker-build:
 	@docker compose build
