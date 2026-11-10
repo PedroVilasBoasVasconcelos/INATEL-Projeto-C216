@@ -1,4 +1,21 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -6,15 +23,88 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/termodejogos
+      GAMES_SERVICE_URL: http://games-service:8000
+      CLUES_SERVICE_URL: http://clues-service:8000
+      FAVORITES_SERVICE_URL: http://favorites-service:8000
+      FRONTEND_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
     depends_on:
-      db:
+      games-service:
+        condition: service_healthy
+      clues-service:
+        condition: service_healthy
+      favorites-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  games-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "app.services.games.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/termodejogos
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clues-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "app.services.clues.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/termodejogos
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  favorites-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "app.services.favorites.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/termodejogos
+    expose:
+      - "8000"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/termodejogos
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   db:
     image: postgres:16-alpine
