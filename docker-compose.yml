@@ -1,4 +1,21 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -9,6 +26,7 @@ services:
       GAMES_SERVICE_URL: http://games-service:8000
       CLUES_SERVICE_URL: http://clues-service:8000
       FAVORITES_SERVICE_URL: http://favorites-service:8000
+      FRONTEND_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
     depends_on:
       games-service:
         condition: service_healthy

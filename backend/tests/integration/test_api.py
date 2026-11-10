@@ -69,6 +69,34 @@ def test_root_and_health_endpoints() -> None:
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_gateway_allows_configured_frontend_origin() -> None:
+    response = client.options(
+        "/api/games",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_gateway_rejects_unconfigured_frontend_origin() -> None:
+    response = client.options(
+        "/api/games",
+        headers={
+            "Origin": "http://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_start_get_and_search_game_endpoints() -> None:
     response = client.post("/api/games", params={"mode": "streak"})
 

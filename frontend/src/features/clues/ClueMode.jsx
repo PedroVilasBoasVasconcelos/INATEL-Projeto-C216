@@ -1,32 +1,106 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  createClueSession,
-  revealNextHint,
+  requestClueHint,
   searchClueGames,
+  startClueGame,
   submitClueGuess,
-} from "../game/gameLogic.js";
+} from "./clueService.js";
 
 export default function ClueMode({ onExit }) {
-  const [session, setSession] = useState(() => createClueSession());
-  const [round, setRound] = useState(1);
+  const [session, setSession] = useState(null);
   const [guess, setGuess] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [error, setError] = useState(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingHint, setIsLoadingHint] = useState(false);
 
-  const start = () => {
+  useEffect(() => {
+    let active = true;
+    startClueGame()
+      .then((newSession) => {
+        if (active) setSession({ ...newSession, hints: [] });
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Não foi possível iniciar o jogo de pistas.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoadingSession(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) return undefined;
+
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      searchClueGames(searchQuery)
+        .then((matches) => {
+          if (active) setSuggestions(matches);
+        })
+        .catch((searchError) => {
+          if (active) {
+            setError(
+              searchError instanceof Error
+                ? searchError.message
+                : "Não foi possível buscar jogos.",
+            );
+          }
+        });
+    }, 150);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [searchQuery]);
+
+  const start = async () => {
     setError(null);
     setGuess("");
+    setSearchQuery("");
     setSuggestions([]);
-    setSession(createClueSession(round));
-    setRound((current) => current + 1);
+    setSession(null);
+    setIsLoadingSession(true);
+    try {
+      setSession({ ...(await startClueGame()), hints: [] });
+    } catch (startError) {
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : "Não foi possível iniciar o jogo de pistas.",
+      );
+    } finally {
+      setIsLoadingSession(false);
+    }
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    if (!guess.trim()) return;
+    if (!guess.trim() || !session || isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      setSession(submitClueGuess(session, guess));
+      const result = await submitClueGuess(session.id, guess);
+      setSession((current) => ({
+        ...current,
+        guesses: [
+          { ...result, id: current.guesses.length + 1 },
+          ...current.guesses,
+        ],
+      }));
       setGuess("");
+      setSearchQuery("");
       setSuggestions([]);
       setError(null);
     } catch (submitError) {
@@ -35,13 +109,20 @@ export default function ClueMode({ onExit }) {
           ? submitError.message
           : "Não foi possível validar o palpite.",
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const requestHint = () => {
+  const requestHint = async () => {
+    if (!session || isLoadingHint) return;
+    setIsLoadingHint(true);
     try {
-      const result = revealNextHint(session);
-      setSession(result.session);
+      const hint = await requestClueHint(session.id);
+      setSession((current) => ({
+        ...current,
+        hints: [...current.hints, hint],
+      }));
       setError(null);
     } catch (hintError) {
       setError(
@@ -49,11 +130,13 @@ export default function ClueMode({ onExit }) {
           ? hintError.message
           : "Não foi possível obter a ajuda.",
       );
+    } finally {
+      setIsLoadingHint(false);
     }
   };
 
-  const hints = session.hints;
-  const history = session.guesses;
+  const hints = session?.hints ?? [];
+  const history = session?.guesses ?? [];
   const label = {
     console: "Console",
     release_year: "Ano",
@@ -94,15 +177,26 @@ export default function ClueMode({ onExit }) {
               onChange={(event) => {
                 const value = event.target.value;
                 setGuess(value);
-                setSuggestions(searchClueGames(value));
+                setSearchQuery(value);
+                setError(null);
               }}
-              disabled={history.some((item) => item.complete)}
+              disabled={
+                !session ||
+                isLoadingSession ||
+                isSubmitting ||
+                history.some((item) => item.complete)
+              }
               placeholder="Digite o nome do jogo"
               className="min-w-0 flex-1 bg-transparent py-4 text-lg outline-none placeholder:text-white/25"
             />
             <button
               type="submit"
-              disabled={!guess.trim() || history.some((item) => item.complete)}
+              disabled={
+                !guess.trim() ||
+                !session ||
+                isSubmitting ||
+                history.some((item) => item.complete)
+              }
               className="px-2 text-sm font-bold uppercase tracking-wider text-[#d7f75b] disabled:opacity-30"
             >
               Chutar
@@ -116,6 +210,7 @@ export default function ClueMode({ onExit }) {
                   type="button"
                   onClick={() => {
                     setGuess(title);
+                    setSearchQuery("");
                     setSuggestions([]);
                   }}
                   className="block w-full rounded-xl px-3 py-3 text-left text-sm text-white/75 hover:bg-[#d7f75b] hover:text-[#101314]"
@@ -129,13 +224,16 @@ export default function ClueMode({ onExit }) {
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={requestHint}
+            onClick={() => void requestHint()}
             disabled={
-              hints.length >= 5 || history.some((item) => item.complete)
+              !session ||
+              isLoadingHint ||
+              hints.length >= 5 ||
+              history.some((item) => item.complete)
             }
             className="rounded-full border border-[#d7f75b]/50 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-[#d7f75b] hover:bg-[#d7f75b] hover:text-[#101314] disabled:opacity-35"
           >
-            Ajuda ({5 - hints.length})
+            {isLoadingHint ? "Buscando..." : `Ajuda (${5 - hints.length})`}
           </button>
           {hints.map((hint) => (
             <span
@@ -199,9 +297,24 @@ export default function ClueMode({ onExit }) {
             </article>
           ))}
         </div>
+        {!session && error && (
+          <button
+            type="button"
+            onClick={() => void start()}
+            className="mt-4 rounded-full border border-[#d7f75b]/50 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-[#d7f75b]"
+          >
+            Tentar novamente
+          </button>
+        )}
+        {isLoadingSession && (
+          <p aria-live="polite" className="mt-5 text-sm text-white/45">
+            Carregando jogo de pistas...
+          </p>
+        )}
         <button
           type="button"
-          onClick={start}
+          onClick={() => void start()}
+          disabled={isLoadingSession}
           className="mt-8 rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/65 hover:border-[#d7f75b] hover:text-[#d7f75b]"
         >
           Novo jogo de pistas

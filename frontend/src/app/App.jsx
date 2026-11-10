@@ -1,63 +1,165 @@
-import { useState } from "react";
-import {
-  createGame,
-  searchGames,
-  submitGameGuess,
-} from "../features/game/gameLogic.js";
+import { useEffect, useRef, useState } from "react";
 import ClueMode from "../features/clues/ClueMode.jsx";
+import {
+  getFavorites,
+  moveFavorite as moveFavoriteRequest,
+  removeFavorite as removeFavoriteRequest,
+  saveFavorite as saveFavoriteRequest,
+} from "../features/favorites/favoriteService.js";
+import {
+  searchGames,
+  startGame as startGameRequest,
+  submitGameGuess,
+} from "../features/game/gameService.js";
 
 function App() {
   const [mode, setMode] = useState("daily");
-  const [game, setGame] = useState(() => createGame("daily"));
+  const [game, setGame] = useState(null);
   const [guess, setGuess] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [score, setScore] = useState(0);
   const [completedRounds, setCompletedRounds] = useState([]);
   const [streakId, setStreakId] = useState(null);
-  const [sequenceRound, setSequenceRound] = useState(0);
   const [streakRounds, setStreakRounds] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [favoriteSaved, setFavoriteSaved] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [error, setError] = useState(null);
+  const [isLoadingGame, setIsLoadingGame] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const gameRequestId = useRef(0);
 
-  const finished = game.status !== "active";
+  useEffect(() => {
+    let active = true;
+    const requestId = ++gameRequestId.current;
+    startGameRequest("daily")
+      .then((startedGame) => {
+        if (active && requestId === gameRequestId.current) {
+          setGame(startedGame);
+        }
+      })
+      .catch((loadError) => {
+        if (active && requestId === gameRequestId.current) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Não foi possível carregar o jogo.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active && requestId === gameRequestId.current) {
+          setIsLoadingGame(false);
+        }
+      });
 
-  const startGame = (nextMode, resetProgress = true) => {
+    return () => {
+      active = false;
+      if (requestId === gameRequestId.current) gameRequestId.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "streak") return undefined;
+
+    let active = true;
+    getFavorites()
+      .then((savedFavorites) => {
+        if (active) setFavorites(savedFavorites);
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Não foi possível carregar as sequências favoritas.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === "clues" || !searchQuery.trim()) return undefined;
+
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      searchGames(searchQuery)
+        .then((matches) => {
+          if (active) setSuggestions(matches);
+        })
+        .catch((searchError) => {
+          if (active) {
+            setError(
+              searchError instanceof Error
+                ? searchError.message
+                : "Não foi possível buscar jogos.",
+            );
+          }
+        });
+    }, 150);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [mode, searchQuery]);
+
+  const startGame = async (nextMode, resetProgress = true) => {
+    const requestId = ++gameRequestId.current;
     setError(null);
     setGuess("");
+    setSearchQuery("");
     setSuggestions([]);
     setMode(nextMode);
+    setGame(null);
+    setIsLoadingGame(true);
     if (resetProgress && nextMode !== "daily") {
       setScore(0);
       setCompletedRounds([]);
     }
-    if (nextMode === "daily") {
-      setGame(createGame("daily"));
-    } else if (nextMode === "streak") {
-      let nextRound = 0;
+    if (nextMode === "streak") {
       if (resetProgress) {
-        setSequenceRound(0);
         setStreakId(crypto.randomUUID());
         setStreakRounds([]);
         setFavoriteSaved(false);
-      } else {
-        nextRound = sequenceRound + 1;
-        setSequenceRound(nextRound);
       }
-      setGame(createGame("streak", nextRound));
+    }
+
+    try {
+      const startedGame = await startGameRequest(nextMode);
+      if (requestId === gameRequestId.current) setGame(startedGame);
+    } catch (startError) {
+      if (requestId === gameRequestId.current) {
+        setError(
+          startError instanceof Error
+            ? startError.message
+            : "Não foi possível iniciar o jogo.",
+        );
+      }
+    } finally {
+      if (requestId === gameRequestId.current) setIsLoadingGame(false);
     }
   };
 
-  const submitGuess = (event) => {
+  const submitGuess = async (event) => {
     event.preventDefault();
-    if (!guess.trim() || game.status !== "active") return;
+    if (!guess.trim() || !game || game.status !== "active" || isSubmitting)
+      return;
 
     setError(null);
+    setIsSubmitting(true);
+    const requestId = gameRequestId.current;
 
     try {
-      const updatedGame = submitGameGuess(game, guess);
+      const updatedGame = await submitGameGuess(game.id, guess);
+      if (requestId !== gameRequestId.current) return;
       setGame(updatedGame);
       setGuess("");
+      setSearchQuery("");
       setSuggestions([]);
 
       if (updatedGame.status === "won" && updatedGame.mode === "streak") {
@@ -77,7 +179,9 @@ function App() {
             guesses: updatedGame.guesses,
           },
         ]);
-        window.setTimeout(() => startGame("streak", false), 900);
+        window.setTimeout(() => {
+          void startGame("streak", false);
+        }, 900);
       }
       if (updatedGame.status === "lost" && updatedGame.mode === "streak") {
         setStreakRounds((rounds) => [
@@ -91,60 +195,62 @@ function App() {
           ? submitError.message
           : "Erro ao enviar palpite.",
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const saveFavorite = () => {
+  const saveFavorite = async () => {
     if (!streakId || !streakRounds.length || favoriteSaved) return;
-    const favorite = {
-      id: streakId,
-      score: streakRounds.reduce(
-        (total, round) => total + (round.won ? 6 - round.attempts : 0),
-        0,
-      ),
-      total_guesses: streakRounds.reduce(
-        (total, round) => total + round.attempts,
-        0,
-      ),
-      rounds_reached: streakRounds.length,
-      position: 1,
-    };
-    setFavorites((current) =>
-      [favorite, ...current].map((item, index) => ({
-        ...item,
-        position: index + 1,
-      })),
-    );
-    setFavoriteSaved(true);
+    setError(null);
+    try {
+      await saveFavoriteRequest(streakId, streakRounds);
+      setFavorites(await getFavorites());
+      setFavoriteSaved(true);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Não foi possível salvar a sequência.",
+      );
+    }
   };
 
-  const moveFavorite = (favorite, position) => {
-    setFavorites((current) => {
-      const from = current.findIndex((item) => item.id === favorite.id);
-      if (from < 0) return current;
-      const to = Math.max(0, Math.min(position - 1, current.length - 1));
-      const reordered = [...current];
-      const [moved] = reordered.splice(from, 1);
-      reordered.splice(to, 0, moved);
-      return reordered.map((item, index) => ({ ...item, position: index + 1 }));
-    });
+  const moveFavorite = async (favorite, position) => {
+    setError(null);
+    try {
+      setFavorites(await moveFavoriteRequest(favorite.id, position));
+    } catch (moveError) {
+      setError(
+        moveError instanceof Error
+          ? moveError.message
+          : "Não foi possível reordenar as sequências.",
+      );
+    }
   };
 
-  const removeFavorite = (favorite) => {
-    setFavorites((current) =>
-      current
-        .filter((item) => item.id !== favorite.id)
-        .map((item, index) => ({ ...item, position: index + 1 })),
-    );
-    if (favorite.id === streakId) setFavoriteSaved(false);
+  const removeFavorite = async (favorite) => {
+    setError(null);
+    try {
+      await removeFavoriteRequest(favorite.id);
+      setFavorites(await getFavorites());
+      if (favorite.id === streakId) setFavoriteSaved(false);
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error
+          ? removeError.message
+          : "Não foi possível remover a sequência.",
+      );
+    }
   };
 
   const resultMessage =
-    game.status === "won"
+    game?.status === "won"
       ? mode === "streak"
         ? "Próximo jogo carregando..."
         : "Você acertou o jogo do dia."
       : "A resposta estava escondida à vista.";
+  const finished = game?.status !== "active";
 
   if (mode === "clues") {
     return (
@@ -161,9 +267,41 @@ function App() {
           <ClueMode
             onExit={() => {
               setMode("daily");
-              startGame("daily");
+              void startGame("daily");
             }}
           />
+        </div>
+      </main>
+    );
+  }
+
+  if (!game) {
+    return (
+      <main className="min-h-screen bg-[#101314] px-5 py-6 text-[#f4f0e8] sm:px-8 lg:px-12">
+        <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col">
+          <header className="flex items-center gap-3 border-b border-white/10 pb-5">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#d7f75b] font-display text-lg font-black text-[#101314]">
+              T
+            </span>
+            <span className="font-display text-xl font-bold tracking-tight">
+              termo<span className="text-[#d7f75b]">.games</span>
+            </span>
+          </header>
+          <section className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <p aria-live="polite" className="text-white/65">
+              {error ||
+                (isLoadingGame ? "Carregando jogo..." : "Jogo indisponível.")}
+            </p>
+            {error && (
+              <button
+                type="button"
+                onClick={() => void startGame(mode)}
+                className="rounded-full border border-[#d7f75b]/50 px-5 py-3 text-sm font-bold text-[#d7f75b]"
+              >
+                Tentar novamente
+              </button>
+            )}
+          </section>
         </div>
       </main>
     );
@@ -191,21 +329,26 @@ function App() {
             <div className="mb-8 flex max-w-xl flex-wrap gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1">
               <button
                 type="button"
-                onClick={() => startGame("daily")}
+                onClick={() => void startGame("daily")}
                 className={`flex-1 rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${mode === "daily" ? "bg-[#d7f75b] text-[#101314]" : "text-white/45 hover:text-white"}`}
               >
                 Diário
               </button>
               <button
                 type="button"
-                onClick={() => startGame("streak")}
+                onClick={() => void startGame("streak")}
                 className={`flex-1 rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${mode === "streak" ? "bg-[#d7f75b] text-[#101314]" : "text-white/45 hover:text-white"}`}
               >
                 Sequência
               </button>
               <button
                 type="button"
-                onClick={() => setMode("clues")}
+                onClick={() => {
+                  setMode("clues");
+                  setError(null);
+                  setSearchQuery("");
+                  setSuggestions([]);
+                }}
                 className="flex-1 rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white/45 transition-colors hover:text-white"
               >
                 Pistas
@@ -244,15 +387,15 @@ function App() {
                   onChange={(event) => {
                     const value = event.target.value;
                     setGuess(value);
-                    setSuggestions(searchGames(value));
+                    setSearchQuery(value);
                     setError(null);
                   }}
-                  disabled={finished}
+                  disabled={finished || isSubmitting}
                   placeholder="Digite o nome do jogo"
                   className="min-w-0 flex-1 bg-transparent py-4 text-lg outline-none placeholder:text-white/25 disabled:cursor-not-allowed"
                 />
                 <button
-                  disabled={!guess.trim() || finished}
+                  disabled={!guess.trim() || finished || isSubmitting}
                   className="px-2 text-sm font-bold uppercase tracking-wider text-[#d7f75b] transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-30"
                   type="submit"
                 >
@@ -271,6 +414,7 @@ function App() {
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
                         setGuess(title);
+                        setSearchQuery("");
                         setSuggestions([]);
                       }}
                       className="block w-full rounded-xl px-3 py-3 text-left text-sm text-white/75 transition-colors hover:bg-[#d7f75b] hover:text-[#101314]"
@@ -379,7 +523,7 @@ function App() {
             </div>
             <button
               type="button"
-              onClick={() => startGame(mode)}
+              onClick={() => void startGame(mode)}
               className="mt-5 w-full rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/65 transition-colors hover:border-[#d7f75b] hover:text-[#d7f75b] disabled:opacity-40"
             >
               {mode === "daily" ? "Recomeçar diário" : "Nova sequência"}

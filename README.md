@@ -2,7 +2,7 @@
 
 ## Arquitetura
 
-O frontend React está sendo desenvolvido como uma SPA. Nesta entrega, as regras do Termo de Jogos rodam localmente; na próxima prática, o frontend será integrado ao API Gateway, que encaminha cada domínio para um serviço independente:
+O frontend React é uma SPA integrada ao API Gateway, que encaminha cada domínio para um serviço independente:
 
 - `games-service`: partidas de capa e busca de jogos.
 - `clues-service`: partidas do modo pistas e dicas.
@@ -45,7 +45,7 @@ backend/
 
 ## Frontend
 
-O frontend da Prática 6 usa JavaScript, React, Vite, Tailwind CSS e Biome para apresentar o **Termo de Jogos**. Nesta etapa, os modos de capa, sequência e pistas usam um catálogo local e mantêm o progresso apenas em memória. A integração com o backend fica para a próxima prática.
+O frontend usa JavaScript, React, Vite, Tailwind CSS e Biome para apresentar o **Termo de Jogos**. Os modos de capa, sequência, pistas e favoritos consomem os serviços do backend por meio de módulos separados por domínio e compartilham um cliente HTTP que exibe erros da API.
 
 Organização do frontend:
 
@@ -54,12 +54,18 @@ frontend/
 ├── src/
 │   ├── app/
 │   │   └── App.jsx
-│   ├── features/game/
-│   │   └── gameLogic.js
-│   ├── features/clues/
-│   │   └── ClueMode.jsx
+│   ├── features/
+│   │   ├── game/gameService.js
+│   │   ├── clues/
+│   │   │   ├── ClueMode.jsx
+│   │   │   └── clueService.js
+│   │   └── favorites/favoriteService.js
+│   ├── services/
+│   │   └── apiClient.js
 │   ├── styles.css
 │   └── main.jsx
+├── Dockerfile
+├── nginx.conf
 ├── tests/
 │   ├── unit/
 │   ├── integration/
@@ -75,14 +81,24 @@ frontend/
 
 `package-lock.json` deve ser versionado para reproduzir as dependências. `node_modules/`, `dist/`, `playwright-report/` e `test-results/` são ignorados pelo Git.
 
-Instale as dependências e inicie a aplicação:
+Para iniciar a aplicação completa com Docker Compose:
+
+```bash
+make run
+```
+
+O frontend fica disponível em `http://localhost:5173`; o gateway da API, em
+`http://localhost:8000`. Para desenvolvimento local do frontend, inicie o
+backend com `docker compose up -d backend` e execute:
 
 ```bash
 make frontend-install
 make frontend-dev
 ```
 
-O Vite fica disponível em `http://localhost:5173`. Para validar o frontend, incluindo E2E:
+O Vite fica disponível em `http://localhost:5173`. O gateway permite
+explicitamente as origens locais do frontend por CORS. Para validar o frontend,
+incluindo E2E:
 
 ```bash
 make frontend-check
@@ -102,13 +118,9 @@ O workflow `.github/workflows/ci-frontend.yml` executa Biome, Vitest, build e Pl
 
 ## Backend
 
-Para iniciar o stack de backend, com Docker Compose instalado:
-
-```bash
-make run
-```
-
-O gateway fica disponível em `http://localhost:8000` e a documentação da API em `http://localhost:8000/docs`.
+O gateway da API fica em `http://localhost:8000`, com documentação em
+`http://localhost:8000/docs`. O frontend acessa somente esse gateway; os
+serviços internos não são expostos ao navegador.
 
 ## Testes do backend
 

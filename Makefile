@@ -17,7 +17,7 @@ help:
 	@echo "  make lint     - verifica o codigo "
 	@echo "  make format   - formata o codigo "
 	@echo "  make check    - executa lint e testes "
-	@echo "  make run      - inicia o gateway e os servicos SOA via Docker "
+	@echo "  make run      - inicia frontend, gateway, servicos e banco via Docker "
 	@echo "  make frontend-install - instala dependencias do frontend"
 	@echo "  make frontend-dev - inicia o frontend"
 	@echo "  make frontend-build - gera o build do frontend"
