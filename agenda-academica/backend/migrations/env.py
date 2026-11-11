@@ -6,7 +6,7 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
-from app.database import Base
+from app.models import Deadline
 
 config = context.config
 
@@ -18,7 +18,7 @@ database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
-target_metadata = Base.metadata
+target_metadata = Deadline.metadata
 
 
 def run_migrations_offline() -> None:

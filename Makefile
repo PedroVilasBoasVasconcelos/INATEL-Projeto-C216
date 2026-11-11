@@ -2,12 +2,13 @@ BACKEND_DIR := agenda-academica/backend
 FRONTEND_DIR := agenda-academica/frontend
 
 .PHONY: help install backend-install frontend-install backend-dev frontend-dev \
-	backend-test backend-lint backend-format backend-check frontend-test \
+	backend-migrate backend-test backend-lint backend-format backend-check frontend-test \
 	frontend-lint frontend-format frontend-build frontend-check check
 
 help:
 	@echo "install           Install backend and frontend dependencies"
 	@echo "backend-dev       Run the FastAPI development server"
+	@echo "backend-migrate   Apply database migrations"
 	@echo "frontend-dev      Run the Vite development server"
 	@echo "backend-check     Lint and test the backend"
 	@echo "frontend-check    Lint, test, and build the frontend"
@@ -23,6 +24,9 @@ frontend-install:
 
 backend-dev:
 	cd $(BACKEND_DIR) && poetry run uvicorn main:app --reload
+
+backend-migrate:
+	cd $(BACKEND_DIR) && poetry run alembic upgrade head
 
 frontend-dev:
 	cd $(FRONTEND_DIR) && npm run dev
