@@ -5,11 +5,9 @@ faculdade em um só lugar. A proposta é facilitar o acompanhamento de trabalhos
 provas e outras entregas, ajudando a identificar o que está próximo do prazo e
 o que já foi concluído.
 
-> **Estado do projeto:** interface React integrada ao CRUD da API e PostgreSQL
-> 17 real validado, com migração aplicada e dados persistidos após recarregar a
-> página. O PostgreSQL de desenvolvimento está em um container local com volume
-> persistente; a configuração reproduzível com Docker Compose será feita na
-> próxima etapa.
+> **Estado do projeto:** interface React integrada ao CRUD da API e PostgreSQL.
+> O ambiente completo pode ser iniciado com Docker Compose; as migrações são
+> aplicadas automaticamente quando o backend inicia.
 
 ## Objetivo
 
@@ -40,32 +38,35 @@ desenvolvida como um projeto full-stack independente.
 | --- | --- |
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Alembic e PostgreSQL |
 | Frontend | React com JavaScript, Vite e Tailwind CSS |
-| Testes | Pytest no backend; Vitest e Testing Library no frontend |
-| Ferramentas previstas | Docker Compose e Playwright para a validação ponta a ponta |
+| Infraestrutura e CI | Docker Compose, GitHub Actions |
+| Testes | Pytest, Vitest e Testing Library; testes ponta a ponta com Playwright ainda são uma etapa separada |
 
 ## Organização do projeto
 
 ```text
-agenda-academica/
-├── backend/
-│   ├── app/
-│   │   ├── api/routes/       # Endpoints HTTP
-│   │   ├── repositories/     # Acesso e persistência de dados
-│   │   ├── schemas/          # Formatos de entrada e saída da API
-│   │   ├── services/         # Regras de negócio
-│   │   ├── database.py       # Base e configuração de persistência
-│   │   └── models.py         # Modelos SQLAlchemy
-│   ├── migrations/           # Migrações Alembic
-│   ├── tests/                # Testes da API
-│   └── main.py               # Inicialização da aplicação FastAPI
-└── frontend/
-    └── src/
-        ├── assets/           # Recursos estáticos
-        ├── components/       # Componentes visuais reutilizáveis
-        ├── services/         # Comunicação com a API
-        ├── test/             # Configuração compartilhada de testes
-        ├── App.jsx           # Estrutura principal da interface
-        └── main.jsx          # Inicialização do React
+.
+├── .github/workflows/ci.yml  # Testes e verificações automatizados
+├── docker-compose.yml        # PostgreSQL, API e frontend
+└── agenda-academica/
+    ├── backend/
+    │   ├── app/
+    │   │   ├── api/routes/   # Endpoints HTTP
+    │   │   ├── repositories/ # Acesso e persistência de dados
+    │   │   ├── schemas/      # Formatos de entrada e saída da API
+    │   │   ├── services/     # Regras de negócio
+    │   │   ├── database.py   # Base e configuração de persistência
+    │   │   └── models.py     # Modelos SQLAlchemy
+    │   ├── migrations/       # Migrações Alembic
+    │   ├── tests/            # Testes da API
+    │   └── main.py           # Inicialização da aplicação FastAPI
+    └── frontend/
+        └── src/
+            ├── assets/       # Recursos estáticos
+            ├── components/   # Componentes visuais reutilizáveis
+            ├── services/     # Comunicação com a API
+            ├── test/         # Configuração compartilhada de testes
+            ├── App.jsx       # Estrutura principal da interface
+            └── main.jsx      # Inicialização do React
 ```
 
 O backend separa rotas, regras de negócio, persistência e validação para manter
@@ -79,22 +80,58 @@ lista de prazos e comunicação HTTP ficam separados em componentes e serviços.
 - Node.js e npm
 - PostgreSQL
 - GNU Make
+- Docker e Docker Compose (para executar a stack em containers)
 
 ## Como executar
 
-Na raiz do repositório, instale as dependências:
+## Executar com Docker Compose
+
+Copie o arquivo de exemplo para configurar portas e credenciais locais (opcional):
 
 ```sh
-make install
+cp .env.example .env
 ```
 
-O PostgreSQL usado no desenvolvimento atual está rodando localmente na porta
-`5432`, com o banco `agenda_academica` e armazenamento persistente. O Docker
-Compose ainda será preparado na próxima etapa. Copie
+Inicie PostgreSQL, backend e frontend:
+
+```sh
+make docker-up
+```
+
+A aplicação fica disponível em `http://localhost:5174`, a API em
+`http://localhost:8001` e a documentação interativa em
+`http://localhost:8001/docs`. As migrações são aplicadas automaticamente e os
+dados do PostgreSQL ficam no volume `postgres_data`.
+
+Para acompanhar os serviços ou pará-los:
+
+```sh
+make docker-logs
+make docker-down
+```
+
+`make docker-down` preserva o volume do banco. Para apagar também os dados,
+execute `docker compose down --volumes`.
+
+As portas padrão do Compose são `5174` (frontend), `8001` (API) e `5433`
+(PostgreSQL), para evitar conflitos com ferramentas que já usem as portas de
+desenvolvimento usuais. Elas podem ser alteradas no `.env`.
+
+## Executar localmente para desenvolvimento
+
+O Compose é a opção recomendada para iniciar toda a aplicação. Para rodar
+backend e frontend diretamente no computador, configure o PostgreSQL localmente
+e copie
 `agenda-academica/backend/.env.example` para
 `agenda-academica/backend/.env` e ajuste `DATABASE_URL` e `CORS_ORIGINS` se
 necessário. A URL padrão considera PostgreSQL local com o banco
 `agenda_academica`.
+
+Instale as dependências do backend e frontend:
+
+```sh
+make install
+```
 
 Na raiz do repositório, aplique as migrações:
 
@@ -166,6 +203,10 @@ Para executar lint, verificação de formatação, testes e build do frontend:
 make check
 ```
 
+O workflow do GitHub Actions executa lint, formatação, testes e build do
+frontend, além de lint, formatação e testes do backend em cada push e pull
+request; também valida a configuração e constrói as imagens Docker.
+
 ## Etapas de desenvolvimento
 
 1. Estruturar os projetos, instalar dependências e preparar os comandos de
@@ -173,7 +214,7 @@ make check
 2. Modelar os dados e implementar a API de prazos com persistência e testes —
    concluído.
 3. Construir e integrar a interface React ao CRUD da API — concluído.
-4. Preparar a execução com Docker Compose e adicionar testes ponta a ponta com
-   persistência real.
-5. Revisar a aplicação, completar a documentação e preparar a demonstração e a
-   entrega.
+4. Preparar a execução com Docker Compose e automatizar os testes do backend e
+   frontend — concluído.
+5. Adicionar testes ponta a ponta com persistência real, revisar a aplicação e
+   preparar a demonstração e a entrega.

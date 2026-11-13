@@ -104,6 +104,38 @@ async def test_deadline_rejects_blank_title(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"course": "   "},
+        {"priority": "urgent"},
+        {"due_date": "not-a-date"},
+    ],
+)
+async def test_deadline_rejects_invalid_fields(
+    client: AsyncClient, overrides: dict[str, object]
+) -> None:
+    response = await client.post("/api/deadlines", json=deadline_payload(**overrides))
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_deadline_trims_text_and_normalizes_empty_description(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/deadlines",
+        json=deadline_payload(title="  Prova final  ", course="  C216  ", description="  "),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "Prova final"
+    assert response.json()["course"] == "C216"
+    assert response.json()["description"] is None
+
+
+@pytest.mark.anyio
 async def test_deadline_status_cannot_be_set_to_overdue(client: AsyncClient) -> None:
     response = await client.post("/api/deadlines", json=deadline_payload(status="overdue"))
 
@@ -129,3 +161,20 @@ async def test_deadline_list_is_sorted_and_paginated(client: AsyncClient) -> Non
 
     assert response.status_code == 200
     assert [item["title"] for item in response.json()] == ["Mais cedo"]
+
+
+@pytest.mark.anyio
+async def test_deadline_list_applies_offset(client: AsyncClient) -> None:
+    for title, days in [("Primeiro", 1), ("Segundo", 2), ("Terceiro", 3)]:
+        await client.post(
+            "/api/deadlines",
+            json=deadline_payload(
+                title=title,
+                due_date=(date.today() + timedelta(days=days)).isoformat(),
+            ),
+        )
+
+    response = await client.get("/api/deadlines", params={"limit": 1, "offset": 1})
+
+    assert response.status_code == 200
+    assert [item["title"] for item in response.json()] == ["Segundo"]

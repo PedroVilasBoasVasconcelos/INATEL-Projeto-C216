@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests and checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agenda-academica/backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+
+      - name: Install backend dependencies
+        run: poetry install --with dev --no-interaction --no-ansi
+
+      - name: Lint backend
+        run: poetry run ruff check .
+
+      - name: Check backend formatting
+        run: poetry run ruff format --check .
+
+      - name: Test backend
+        run: poetry run pytest
+
+  frontend:
+    name: Frontend tests and checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agenda-academica/frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agenda-academica/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Check frontend formatting
+        run: npm run format:check
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  compose-config:
+    name: Validate Docker Compose configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build Docker images
+        run: docker compose build

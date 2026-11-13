@@ -3,13 +3,18 @@ FRONTEND_DIR := agenda-academica/frontend
 
 .PHONY: help install backend-install frontend-install backend-dev frontend-dev \
 	backend-migrate backend-test backend-lint backend-format backend-check frontend-test \
-	frontend-lint frontend-format frontend-build frontend-check check
+	frontend-lint frontend-format frontend-build frontend-check docker-up docker-down \
+	docker-logs docker-check check
 
 help:
 	@echo "install           Install backend and frontend dependencies"
 	@echo "backend-dev       Run the FastAPI development server"
 	@echo "backend-migrate   Apply database migrations"
 	@echo "frontend-dev      Run the Vite development server"
+	@echo "docker-up         Build and start the complete Docker Compose stack"
+	@echo "docker-down       Stop the Docker Compose stack (keeps database data)"
+	@echo "docker-logs       Follow Docker Compose service logs"
+	@echo "docker-check      Validate the Docker Compose configuration"
 	@echo "backend-check     Lint and test the backend"
 	@echo "frontend-check    Lint, test, and build the frontend"
 	@echo "check             Run all backend and frontend checks"
@@ -30,6 +35,18 @@ backend-migrate:
 
 frontend-dev:
 	cd $(FRONTEND_DIR) && npm run dev
+
+docker-up:
+	docker compose up --build -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+
+docker-check:
+	docker compose config --quiet
 
 backend-test:
 	cd $(BACKEND_DIR) && poetry run pytest
