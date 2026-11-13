@@ -4,7 +4,7 @@ FRONTEND_DIR := agenda-academica/frontend
 .PHONY: help install backend-install frontend-install backend-dev frontend-dev \
 	backend-migrate backend-test backend-lint backend-format backend-check frontend-test \
 	frontend-lint frontend-format frontend-build frontend-check docker-up docker-down \
-	docker-logs docker-check check
+	docker-logs docker-check e2e-test check
 
 help:
 	@echo "install           Install backend and frontend dependencies"
@@ -15,6 +15,7 @@ help:
 	@echo "docker-down       Stop the Docker Compose stack (keeps database data)"
 	@echo "docker-logs       Follow Docker Compose service logs"
 	@echo "docker-check      Validate the Docker Compose configuration"
+	@echo "e2e-test          Run Playwright end-to-end tests (requires Docker stack)"
 	@echo "backend-check     Lint and test the backend"
 	@echo "frontend-check    Lint, test, and build the frontend"
 	@echo "check             Run all backend and frontend checks"
@@ -47,6 +48,9 @@ docker-logs:
 
 docker-check:
 	docker compose config --quiet
+
+e2e-test:
+	cd $(FRONTEND_DIR) && npm run test:e2e
 
 backend-test:
 	cd $(BACKEND_DIR) && poetry run pytest

@@ -64,3 +64,4 @@ services:
 
 volumes:
   postgres_data:
+    name: agenda_academica_compose_pgdata_v1

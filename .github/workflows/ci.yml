@@ -70,15 +70,38 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  compose-config:
-    name: Validate Docker Compose configuration
+  e2e:
+    name: Docker Compose end-to-end tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agenda-academica/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: agenda-academica/frontend
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: agenda-academica/frontend
+
       - name: Validate Compose configuration
         run: docker compose config --quiet
 
-      - name: Build Docker images
-        run: docker compose build
+      - name: Start application stack
+        run: docker compose up --build -d --wait --wait-timeout 120
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+        working-directory: agenda-academica/frontend
+
+      - name: Stop application stack
+        if: always()
+        run: docker compose down

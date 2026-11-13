@@ -101,7 +101,7 @@ make docker-up
 A aplicação fica disponível em `http://localhost:5174`, a API em
 `http://localhost:8001` e a documentação interativa em
 `http://localhost:8001/docs`. As migrações são aplicadas automaticamente e os
-dados do PostgreSQL ficam no volume `postgres_data`.
+dados do PostgreSQL ficam no volume `agenda_academica_compose_pgdata_v1`.
 
 Para acompanhar os serviços ou pará-los:
 
@@ -197,24 +197,36 @@ make backend-test
 make frontend-test
 ```
 
+Os testes ponta a ponta usam Playwright e a stack Docker Compose já iniciada.
+Instale o Chromium uma vez e então execute:
+
+```sh
+cd agenda-academica/frontend
+npx playwright install chromium
+cd ../..
+make e2e-test
+```
+
+O teste E2E cria um prazo temporário pela interface, valida edição, conclusão,
+persistência após recarregar, reabertura e exclusão. O registro é removido ao
+final do teste, inclusive quando ocorre uma falha depois da criação.
+
 Para executar lint, verificação de formatação, testes e build do frontend:
 
 ```sh
 make check
 ```
 
-O workflow do GitHub Actions executa lint, formatação, testes e build do
-frontend, além de lint, formatação e testes do backend em cada push e pull
-request; também valida a configuração e constrói as imagens Docker.
+O workflow do GitHub Actions executa lint, formatação, testes unitários e build
+do frontend, além de lint, formatação e testes do backend. Também inicia a
+stack Docker e executa o teste E2E em cada push e pull request.
 
 ## Etapas de desenvolvimento
 
 1. Estruturar os projetos, instalar dependências e preparar os comandos de
-   desenvolvimento — concluído.
-2. Modelar os dados e implementar a API de prazos com persistência e testes —
-   concluído.
-3. Construir e integrar a interface React ao CRUD da API — concluído.
+   desenvolvimento.
+2. Modelar os dados e implementar a API de prazos com persistência e testes.
+3. Construir e integrar a interface React ao CRUD da API.
 4. Preparar a execução com Docker Compose e automatizar os testes do backend e
-   frontend — concluído.
-5. Adicionar testes ponta a ponta com persistência real, revisar a aplicação e
-   preparar a demonstração e a entrega.
+   frontend.
+5. Adicionar testes ponta a ponta com persistência real.
