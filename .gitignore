@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+agenda-academica/frontend/node_modules/
+agenda-academica/frontend/dist/
+agenda-academica/frontend/coverage/
+agenda-academica/frontend/playwright-report/
+agenda-academica/frontend/test-results/

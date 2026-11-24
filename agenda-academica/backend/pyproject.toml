@@ -1,0 +1,39 @@
+[project]
+name = "agenda-academica-api"
+version = "0.1.0"
+description = "API da Agenda Acadêmica"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi (>=0.162.2,<0.163.0)",
+    "uvicorn[standard] (>=0.54.0,<0.55.0)",
+    "sqlalchemy (>=2.1.8,<3.0.0)",
+    "alembic (>=1.20.1,<2.0.0)",
+    "psycopg[binary] (>=3.3.8,<4.0.0)",
+    "python-dotenv (>=1.2.4,<2.0.0)"
+]
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.2.0,<10.0.0)",
+    "ruff (>=0.17.4,<0.18.0)",
+    "httpx (>=0.28.1,<0.29.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
