@@ -1,5 +1,7 @@
 # Agenda Acadêmica
 
+> **Vídeo de apresentação do projeto** [Assista à demonstração do projeto](https://youtu.be/EmYNhpeMIIo)
+
 Aplicação web para estudantes organizarem os prazos das atividades da
 faculdade em um só lugar. A proposta é facilitar o acompanhamento de trabalhos,
 provas e outras entregas, ajudando a identificar o que está próximo do prazo e
